@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getClient, restoreSessionFromStorage, storeSession, clearStoredSession } from '../services/nakama';
+import { getClient, restoreSessionFromStorage, storeSession, clearStoredSession, nakamaService } from '../services/nakama';
 
 const AuthContext = createContext();
 
@@ -44,20 +44,23 @@ export function AuthProvider({ children }) {
     try {
       setError('');
       setLoading(true);
-      const client = getClient();
-      const newSession = await client.authenticateEmail(email, password, true, username);
+      
+      // Use the enhanced Nakama service
+      const newSession = await nakamaService.authenticateEmail(email, password, true, username);
       
       setSession(newSession);
-      storeSession(newSession);
+      
+      // Get account info
+      const account = await nakamaService.getAccount();
       
       setCurrentUser({
         id: newSession.user_id,
-        username,
-        email
+        username: account.user.username,
+        email: account.user.email
       });
       
       // Register player in the backend
-      await client.rpc(newSession, "register_player", {});
+      await nakamaService.registerPlayer();
       
       return newSession;
     } catch (error) {
@@ -74,16 +77,15 @@ export function AuthProvider({ children }) {
     try {
       setError('');
       setLoading(true);
-      const client = getClient();
-      const newSession = await client.authenticateEmail(email, password);
+      
+      // Use the enhanced Nakama service
+      const newSession = await nakamaService.authenticateEmail(email, password);
       
       setSession(newSession);
-      localStorage.setItem('nakama_session', newSession.token);
-      localStorage.setItem('nakama_refresh', newSession.refresh_token);
-      localStorage.setItem('nakama_user_id', newSession.user_id);
       
-      // Fetch user account info
-      const account = await client.getAccount(newSession);
+      // Get account info
+      const account = await nakamaService.getAccount();
+      
       setCurrentUser({
         id: newSession.user_id,
         username: account.user.username,
@@ -91,7 +93,7 @@ export function AuthProvider({ children }) {
       });
       
       // Register player in the backend (updates last login)
-      await client.rpc(newSession, "register_player", {});
+      await nakamaService.registerPlayer();
       
       return newSession;
     } catch (error) {
@@ -106,6 +108,7 @@ export function AuthProvider({ children }) {
   // Logout the user
   const logout = async () => {
     try {
+      nakamaService.disconnectSocket();
       setSession(null);
       setCurrentUser(null);
       clearStoredSession();
