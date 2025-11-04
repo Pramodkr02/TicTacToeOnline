@@ -1,0 +1,55 @@
+version: '3'
+
+services:
+  cockroachdb:
+    image: cockroachdb/cockroach:latest
+    command: start-single-node --insecure
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    volumes:
+      - cockroach-data:/cockroach/cockroach-data
+    networks:
+      - nakama-network
+
+  nakama:
+    image: heroiclabs/nakama:3.15.0
+    entrypoint:
+      - "/bin/sh"
+      - "-ecx"
+      - >
+        /nakama/nakama migrate up --database.address root@cockroachdb:26257 &&
+        exec /nakama/nakama --name nakama1 --database.address root@cockroachdb:26257 --logger.level DEBUG --session.token_expiry_sec 7200 --runtime.http_key "defaultkey" --socket.server_key "defaultkey"
+    restart: unless-stopped
+    links:
+      - cockroachdb
+    depends_on:
+      - cockroachdb
+    ports:
+      - "7349:7349"
+      - "7350:7350"
+      - "7351:7351"
+    volumes:
+      - ./backend/modules:/nakama/data/modules
+      - ./backend/data:/nakama/data/sql
+      - ./backend/config:/nakama/data/config
+    networks:
+      - nakama-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - nakama
+    networks:
+      - nakama-network
+
+networks:
+  nakama-network:
+    driver: bridge
+
+volumes:
+  cockroach-data:

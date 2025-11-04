@@ -1,0 +1,25 @@
+name: nakama-arena
+data_dir: "./data"
+
+logger:
+  level: "debug"
+
+database:
+  address: ["root@cockroachdb:26257"]
+  conn_max_lifetime_ms: 0
+  max_open_conns: 0
+  max_idle_conns: 100
+
+session:
+  token_expiry_sec: 7200
+  refresh_token_expiry_sec: 86400
+
+socket:
+  server_key: "defaultkey"
+  port: 7350
+  max_message_size_bytes: 4096
+  max_request_size_bytes: 131072
+
+runtime:
+  path: "./modules"
+  http_key: "defaultkey"
