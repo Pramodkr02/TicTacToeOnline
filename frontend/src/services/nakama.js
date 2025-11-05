@@ -35,12 +35,11 @@ export async function authenticateEmail(email, password, create = false) {
 
 export async function rpc(name, payload = {}) {
   if (!session) throw new Error("Not authenticated");
-  const resp = await client.rpc(
+  return client.rpc(
     session.token,
     name,
     payload
   );
-  return resp.payload;
 }
 
 export async function connectSocket(onMatchData, onNotification) {
@@ -73,7 +72,15 @@ export function socketSendMatchState(matchId, opCode, data) {
   return socket.send({ match_data_send: { match_id: matchId, op_code: opCode, data: data } });
 }
 
-export function logout() {
+export async function logout() {
+  if (session) {
+    try {
+      await client.sessionLogout(session);
+    } catch (error) {
+      console.error("Session logout failed:", error);
+      // Even if logout fails, clear local state
+    }
+  }
   session = null;
   if(socket) {
     socket.disconnect();

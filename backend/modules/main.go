@@ -91,7 +91,27 @@ func deliverEmail(ctx context.Context, logger runtime.Logger, to string, code st
 	}
 
 	if err := initializer.RegisterRpc("get_verification_status", getVerificationStatus); err != nil {
-		logger.Error("Unable to register RPC function get_verification_status: %v", err)
+ 		logger.Error("Unable to register RPC function get_verification_status: %v", err)
+ 		return err
+ 	}
+
+	if err := initializer.RegisterRpc("make_move", rpcMakeMove); err != nil {
+		logger.Error("Unable to register RPC function make_move: %v", err)
+		return err
+	}
+
+	if err := initializer.RegisterRpc("list_rooms", rpcListRooms); err != nil {
+		logger.Error("Unable to register RPC: %v", err)
+		return err
+	}
+
+	if err := initializer.RegisterRpc("create_room", rpcCreateRoom); err != nil {
+		logger.Error("Unable to register RPC: %v", err)
+		return err
+	}
+
+	if err := initializer.RegisterRpc("join_room", rpcJoinRoom); err != nil {
+		logger.Error("Unable to register RPC: %v", err)
 		return err
 	}
 
@@ -432,4 +452,143 @@ func getVerificationStatus(ctx context.Context, logger runtime.Logger, db *sql.D
     out := map[string]any{"verified": cur.Verified}
     b, _ := json.Marshal(out)
     return string(b), nil
+}
+
+func rpcJoinRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	userID, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok {
+		return "", runtime.NewError("User ID not found", 401)
+	}
+
+	var input struct {
+		MatchID string `json:"match_id"`
+	}
+
+	if err := json.Unmarshal([]byte(payload), &input); err != nil {
+		return "", runtime.NewError("Invalid payload", 400)
+	}
+
+	// Attempt to join the match
+	_, _, err := nk.MatchJoin(ctx, input.MatchID, nil)
+	if err != nil {
+		// Check if the error is due to the match being full
+		if strings.Contains(err.Error(), "match full") {
+			return "", runtime.NewError("Room is full", 409) // 409 Conflict
+		}
+		logger.Error("Error joining match: %v", err)
+		return "", err
+	}
+
+	return "{\"success\":true}", nil
+}
+
+func rpcMakeMove(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	userID, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok {
+		return "", runtime.NewError("User ID not found", 401)
+	}
+
+	var input struct {
+		MatchID string `json:"match_id"`
+		Move    int    `json:"move"`
+	}
+
+	if err := json.Unmarshal([]byte(payload), &input); err != nil {
+		return "", runtime.NewError("Invalid payload", 400)
+	}
+
+	// In a real-world scenario, you would have a more complex state management.
+	// For this example, we'll just broadcast the move to the other player.
+
+	// Create the data to send
+	data, _ := json.Marshal(map[string]interface{}{
+		"move":     input.Move,
+		"sender":   userID,
+		"op_code":  1, // OpCode for a move
+	})
+
+	// Send the data to the match
+	nk.MatchSignal(ctx, input.MatchID, string(data))
+
+	return "{\"success\":true}", nil
+}
+
+func rpcListRooms(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	const limit = 10
+
+	matches, err := nk.MatchList(ctx, limit, true, "", nil, nil, "")
+	if err != nil {
+		logger.Error("Error listing matches: %v", err)
+		return "", err
+	}
+
+	// We use a map to deduplicate matches by ID, as a match can have multiple nodes.
+	deduplicatedMatches := make(map[string]*runtime.Match)
+	for _, match := range matches {
+		if _, ok := deduplicatedMatches[match.MatchID]; !ok {
+			deduplicatedMatches[match.MatchID] = match
+		}
+	}
+
+	// Convert map back to slice
+	uniqueMatches := make([]*runtime.Match, 0, len(deduplicatedMatches))
+	for _, match := range deduplicatedMatches {
+		uniqueMatches = append(uniqueMatches, match)
+	}
+
+	// Create a response structure
+	response := struct {
+		Rooms []*runtime.Match `json:"rooms"`
+	}{
+		Rooms: uniqueMatches,
+	}
+
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		logger.Error("Error marshalling response: %v", err)
+		return "", err
+	}
+
+	return string(jsonResponse), nil
+}
+
+func rpcCreateRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	matchID, err := nk.MatchCreate(ctx, "tic_tac_toe", map[string]interface{}{"name": "New Room"})
+	if err != nil {
+		logger.Error("Error creating match: %v", err)
+		return "", err
+	}
+
+	response := map[string]string{"match_id": matchID}
+	jsonResponse, _ := json.Marshal(response)
+
+	return string(jsonResponse), nil
+}
+
+func rpcJoinRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+	userID, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+	if !ok {
+		return "", runtime.NewError("User ID not found", 401)
+	}
+
+	var input struct {
+		MatchID string `json:"match_id"`
+	}
+
+	if err := json.Unmarshal([]byte(payload), &input); err != nil {
+		return "", runtime.NewError("Invalid payload", 400)
+	}
+
+	// Attempt to join the match
+	err := nk.MatchJoin(ctx, input.MatchID, userID, nil)
+	if err != nil {
+		// Check if the error is due to the match being full
+		if strings.Contains(err.Error(), "match full") {
+			return "", runtime.NewError("Room is full", 409) // 409 Conflict
+		}
+		logger.Error("Error joining match: %v", err)
+		return "", err
+	}
+
+	return "{\"success\":true}", nil
 }
