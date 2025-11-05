@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useAuth } from '../contexts/AuthContext';
-import { nakamaService } from '../services/nakama';
+import { rpc } from '../services/nakama';
 
 export default function Leaderboard() {
-  const { session } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -12,15 +10,12 @@ export default function Leaderboard() {
   useEffect(() => {
     let timer;
     const run = async () => {
-      if (!session) return;
-      
       try {
         setLoading(true);
         setError(null);
         
-        // Get leaderboard data using the nakama service
-        const leaderboardData = await nakamaService.getLeaderboard(session, 50); // Get top 50 players
-        setRows(leaderboardData.records || []);
+        const response = await rpc('get_leaderboard', {});
+        setRows(response.payload.records || []);
         
       } catch (e) {
         console.error('Failed to fetch leaderboard:', e);
@@ -33,7 +28,7 @@ export default function Leaderboard() {
     run();
     timer = setInterval(run, 30000); // Refresh every 30 seconds
     return () => { if (timer) clearInterval(timer); };
-  }, [session]);
+  }, []);
 
   const getRankColor = (rank) => {
     if (rank === 1) return 'text-yellow-500';

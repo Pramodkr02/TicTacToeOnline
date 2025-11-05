@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { verifyEmailCode, requestEmailVerification } from '../services/nakama';
+import { rpc } from '../services/nakama';
 
 export default function VerifyEmail() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const email = location.state?.email;
 
   const onChange = (idx, val) => {
-    if (val.length > 1) return; // single char
+    if (val.length > 1) return;
     const next = [...otp];
     next[idx] = val.replace(/\D/g, '');
     setOtp(next);
@@ -23,26 +25,18 @@ export default function VerifyEmail() {
       toast.error('Enter the 6-digit code');
       return;
     }
+    if (!email) {
+      toast.error('Email not found. Please try registering again.');
+      navigate('/login');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await verifyEmailCode(code);
-      if (!res || !res.verified) {
-        throw new Error('Invalid code');
-      }
-      toast.success('Email verified');
-      navigate('/dashboard');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resend = async () => {
-    try {
-      setLoading(true);
-      await requestEmailVerification();
-      toast.success('Verification code sent');
-    } catch (e) {
-      toast.error(e?.message || 'Failed to resend code');
+      await rpc('verify_email', { email, otp: code });
+      toast.success('Email verified successfully!');
+      navigate('/lobby');
+    } catch (err) {
+      toast.error(err.message || 'Failed to verify email');
     } finally {
       setLoading(false);
     }
@@ -54,7 +48,7 @@ export default function VerifyEmail() {
         <div className="rounded-2xl p-6 bg-slate-900/80 backdrop-blur border border-slate-800">
           <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-primary-300">✉️</div>
           <h1 className="text-2xl font-semibold mb-2">Verify your email</h1>
-          <p className="text-sm text-slate-400 mb-6">Enter the 6-digit code we sent to your email.</p>
+          <p className="text-sm text-slate-400 mb-6">Enter the 6-digit code we sent to <strong>{email || 'your email'}</strong>.</p>
           <form onSubmit={onSubmit}>
             <div className="flex justify-between gap-2 mb-4">
               {otp.map((v,i)=> (
@@ -63,7 +57,6 @@ export default function VerifyEmail() {
             </div>
             <div className="flex gap-2">
               <button type="submit" disabled={loading} className="flex-1 py-2 rounded-md bg-primary-600 hover:bg-primary-500 disabled:opacity-60">{loading? 'Verifying...' : 'Verify'}</button>
-              <button type="button" onClick={resend} disabled={loading} className="px-3 py-2 rounded-md bg-slate-800 hover:bg-slate-700 disabled:opacity-60">Resend</button>
             </div>
           </form>
         </div>

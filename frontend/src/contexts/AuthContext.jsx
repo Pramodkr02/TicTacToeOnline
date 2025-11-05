@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getClient, restoreSessionFromStorage, storeSession, clearStoredSession, nakamaService } from '../services/nakama';
+import { getSession, authenticateEmail as nakamaAuthEmail, logout as nakamaLogout, rpc } from '../services/nakama';
 
 const AuthContext = createContext();
 
@@ -8,93 +8,21 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [nakamaClient, setNakamaClient] = useState(null);
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(getSession());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const client = getClient();
-    setNakamaClient(client);
-    const restored = restoreSessionFromStorage();
-    const run = async () => {
-      try {
-        if (restored) {
-          const sessionToUse = restored.isexpired(new Date())
-            ? await client.sessionRefresh(restored)
-            : restored;
-          setSession(sessionToUse);
-          storeSession(sessionToUse);
-          const account = await client.getAccount(sessionToUse);
-          setCurrentUser({ id: sessionToUse.user_id, username: account.user.username, email: account.user.email });
-        }
-      } catch (err) {
-        console.error('Failed to restore session:', err);
-        clearStoredSession();
-      } finally {
-        setLoading(false);
-      }
-    };
-    run();
+    setSession(getSession());
+    setLoading(false);
   }, []);
 
-  // Register a new user
-  const register = async (email, password, username) => {
-    try {
-      setError('');
-      setLoading(true);
-      
-      // Use the enhanced Nakama service
-      const newSession = await nakamaService.authenticateEmail(email, password, true, username);
-      
-      setSession(newSession);
-      
-      // Get account info
-      const account = await nakamaService.getAccount();
-      
-      setCurrentUser({
-        id: newSession.user_id,
-        username: account.user.username,
-        email: account.user.email
-      });
-      
-      // Register player in the backend
-      await nakamaService.registerPlayer();
-      
-      return newSession;
-    } catch (error) {
-      console.error("Registration error:", error);
-      setError(error.message || 'Failed to register');
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Login with email and password
   const login = async (email, password) => {
     try {
       setError('');
       setLoading(true);
-      
-      // Use the enhanced Nakama service
-      const newSession = await nakamaService.authenticateEmail(email, password);
-      
+      const newSession = await nakamaAuthEmail(email, password);
       setSession(newSession);
-      
-      // Get account info
-      const account = await nakamaService.getAccount();
-      
-      setCurrentUser({
-        id: newSession.user_id,
-        username: account.user.username,
-        email: account.user.email
-      });
-      
-      // Register player in the backend (updates last login)
-      await nakamaService.registerPlayer();
-      
       return newSession;
     } catch (error) {
       console.error("Login error:", error);
@@ -105,45 +33,36 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Logout the user
-  const logout = async () => {
+  const register = async (email, password) => {
     try {
-      nakamaService.disconnectSocket();
-      setSession(null);
-      setCurrentUser(null);
-      clearStoredSession();
+        setError('');
+        setLoading(true);
+        const newSession = await nakamaAuthEmail(email, password, true);
+        await rpc("register", { email: email });
+        setSession(newSession);
+        return newSession;
     } catch (error) {
-      console.error("Logout error:", error);
+        console.error("Registration error:", error);
+        setError(error.message || 'Failed to register');
+        throw error;
+    } finally {
+        setLoading(false);
     }
   };
 
-  // Reset password (placeholder)
-  const resetPassword = async (email) => {
-    try {
-      setError('');
-      setLoading(true);
-      console.log(`Password reset requested for ${email}`);
-      return true;
-    } catch (error) {
-      console.error("Password reset error:", error);
-      setError(error.message || 'Failed to reset password');
-      throw error;
-    } finally {
-      setLoading(false);
-    }
+  const logout = () => {
+    nakamaLogout();
+    setSession(null);
   };
 
   const value = {
-    currentUser,
-    nakamaClient,
     session,
     loading,
     error,
-    isAuthenticated: !!currentUser,
-    register,
+    isAuthenticated: !!session,
     login,
+    register,
     logout,
-    resetPassword
   };
 
   return (

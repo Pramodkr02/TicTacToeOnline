@@ -11,7 +11,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
-import Matchmaking from "./pages/Matchmaking";
+import Lobby from './pages/Matchmaking';
 import Game from "./pages/Game";
 import Leaderboard from "./pages/Leaderboard";
 import Docs from "./pages/Docs";
@@ -61,7 +61,7 @@ export default function App() {
       >
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
-        <Route path="matchmaking" element={<Matchmaking />} />
+        <Route path="lobby" element={<Lobby />} />
         <Route path="game/:matchId" element={<Game />} />
         <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="profile" element={<Profile />} />

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { nakamaService } from '../services/nakama';
+import { rpc } from '../services/nakama';
 
 export default function Dashboard() {
   const { currentUser } = useAuth();
@@ -14,9 +14,8 @@ export default function Dashboard() {
     const fetchPlayerStats = async () => {
       try {
         setLoading(true);
-        // Register/refresh player stats
-        const stats = await nakamaService.registerPlayer();
-        setPlayerStats(stats);
+        const stats = await rpc('get_player_stats', {});
+        setPlayerStats(stats.payload);
       } catch (err) {
         console.error('Error fetching player stats:', err);
         setError('Failed to load player statistics');
@@ -39,10 +38,8 @@ export default function Dashboard() {
   ];
 
   const quickActions = [
-    { title: 'Find Match', description: 'Start playing against other players', icon: '⚔️', link: '/matchmaking', color: 'bg-blue-500 hover:bg-blue-600' },
-    { title: 'Local Game', description: 'Practice against AI or friends', icon: '🎮', link: '/game/local', color: 'bg-green-500 hover:bg-green-600' },
+    { title: 'Find Match', description: 'Start playing against other players', icon: '⚔️', link: '/lobby', color: 'bg-blue-500 hover:bg-blue-600' },
     { title: 'Leaderboard', description: 'See how you rank globally', icon: '📊', link: '/leaderboard', color: 'bg-purple-500 hover:bg-purple-600' },
-    { title: 'Game Docs', description: 'Learn rules and strategies', icon: '📚', link: '/docs', color: 'bg-orange-500 hover:bg-orange-600' },
   ];
 
   if (loading) {
@@ -90,7 +87,7 @@ export default function Dashboard() {
         transition={{ delay: 0.1 }}
         className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6"
       >
-        {stats.map((stat, index) => (
+        {stats.map((stat) => (
           <div
             key={stat.label}
             className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
@@ -118,8 +115,8 @@ export default function Dashboard() {
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
           Quick Actions
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {quickActions.map((action, index) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {quickActions.map((action) => (
             <Link
               key={action.title}
               to={action.link}
@@ -132,30 +129,6 @@ export default function Dashboard() {
               <p className="text-sm opacity-90">{action.description}</p>
             </Link>
           ))}
-        </div>
-      </motion.div>
-
-      {/* Recent Activity */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-xl"
-      >
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-          Recent Activity
-        </h2>
-        <div className="space-y-4">
-          <div className="flex items-center space-x-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <div className="text-2xl">🎮</div>
-            <div className="flex-1">
-              <p className="font-medium text-gray-900 dark:text-white">Welcome to Nakama Arena!</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Your journey begins here. Start playing to see your activity.
-              </p>
-            </div>
-            <div className="text-sm text-gray-500">Just now</div>
-          </div>
         </div>
       </motion.div>
     </div>

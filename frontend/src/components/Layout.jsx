@@ -17,7 +17,7 @@ const NavLinks = () => {
       <NavLink to="/dashboard" className={navLinkClasses}>
         📊 Dashboard
       </NavLink>
-      <NavLink to="/matchmaking" className={navLinkClasses}>
+      <NavLink to="/lobby" className={navLinkClasses}>
         🎮 Play
       </NavLink>
       <NavLink to="/leaderboard" className={navLinkClasses}>

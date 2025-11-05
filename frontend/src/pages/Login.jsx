@@ -1,30 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
-  const { login, error } = useAuth();
+  const { login, register, error } = useAuth();
+  const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!email || !password || (isRegister && !username)) {
       toast.error('Please fill in all fields');
       return;
     }
     setLoading(true);
     try {
-      await login(email, password);
-      toast.success('Signed in successfully!');
-      navigate('/dashboard');
-    } catch (error) {
-      toast.error(error.message || 'Failed to sign in');
+      if (isRegister) {
+        await register(email, password, username);
+        toast.success('Registered successfully! Please check your email to verify your account.');
+        navigate('/verify-email');
+      } else {
+        await login(email, password);
+        toast.success('Signed in successfully!');
+        navigate('/verify-email', { state: { email } });
+        navigate('/lobby');
+      }
+    } catch (err) {
+      toast.error(err.message || `Failed to ${isRegister ? 'register' : 'sign in'}`);
     } finally {
       setLoading(false);
     }
@@ -33,7 +42,6 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full space-y-8">
-        {/* Logo and Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -44,14 +52,13 @@ export default function Login() {
             <span className="text-white text-3xl font-bold">NA</span>
           </div>
           <h2 className="text-4xl font-extrabold text-gray-900 dark:text-white mb-2">
-            Welcome Back
+            {isRegister ? 'Create an Account' : 'Welcome Back'}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 text-lg">
-            Sign in to continue your gaming journey
+            {isRegister ? 'Join the community and start playing!' : 'Sign in to continue your gaming journey'}
           </p>
         </motion.div>
 
-        {/* Login Form */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -72,7 +79,25 @@ export default function Login() {
               )}
             </AnimatePresence>
 
-            {/* Email Input */}
+            {isRegister && (
+                 <div>
+                 <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                   Username
+                 </label>
+                 <div className="relative">
+                   <input
+                     id="username"
+                     type="text"
+                     value={username}
+                     onChange={(e) => setUsername(e.target.value)}
+                     required
+                     className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200 focus:bg-white dark:focus:bg-gray-600"
+                     placeholder="Choose a username"
+                   />
+                 </div>
+               </div>
+            )}
+
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Email Address
@@ -95,7 +120,6 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Password Input */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Password
@@ -129,24 +153,6 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">Remember me</span>
-              </label>
-              <Link
-                to="/forgot-password"
-                className="text-sm text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 transition-colors duration-200"
-              >
-                Forgot password?
-              </Link>
-            </div>
-
-            {/* Submit Button */}
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -156,39 +162,26 @@ export default function Login() {
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span>Signing in...</span>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-.jsx-white"></div>
+                  <span>{isRegister ? 'Creating Account...' : 'Signing in...'}</span>
                 </>
               ) : (
-                <span>Sign In</span>
+                <span>{isRegister ? 'Create Account' : 'Sign In'}</span>
               )}
             </motion.button>
           </form>
 
-          {/* Sign Up Link */}
           <div className="text-center mt-6">
             <p className="text-gray-600 dark:text-gray-400">
-              Don't have an account?{' '}
-              <Link
-                to="/register"
+              {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
+              <button
+                onClick={() => setIsRegister(!isRegister)}
                 className="text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors duration-200"
               >
-                Sign up here
-              </Link>
+                {isRegister ? 'Sign in' : 'Sign up'}
+              </button>
             </p>
           </div>
-        </motion.div>
-
-        {/* Demo Credentials */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4"
-        >
-          <p className="text-sm text-blue-800 dark:text-blue-400 text-center">
-            <strong>Demo:</strong> Use any email and password to get started!
-          </p>
         </motion.div>
       </div>
     </div>
