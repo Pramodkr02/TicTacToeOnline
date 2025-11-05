@@ -4,62 +4,40 @@ A real-time multiplayer mobile-first game platform built with Nakama, Go, Cockro
 
 ## Features
 
-- Authentication (Signup-first, Login, Logout)
-- Email verification (OTP UI flow) after signup
-- Instant Matchmaking (vs Player or Bot) — no search animation
-- Real-time gameplay via WebSockets (Nakama)
-- Local Multiplayer mode (X/O on same device)
-- Leaderboard with periodic realtime updates
-- Docs page with game rules
-- Profile page (edit username)
-- Dark/Light theme toggle (top-right, persisted)
-- Responsive, mobile-first UI/UX
+- User authentication (signup, login, logout)
+- Email verification
+- Real-time multiplayer gameplay with a lobby system
+- Room creation and joining
+- Leaderboard with auto-refresh
+- Player statistics
+- Dark/Light theme toggle
 
 ## Tech Stack
 
-- **Backend**: Nakama + Go
+- **Backend**: Nakama (Go)
 - **Database**: CockroachDB
-- **Frontend**: React + TailwindCSS (mobile-first)
+- **Frontend**: React, Vite, Tailwind CSS
 - **Real-time**: WebSocket (via Nakama)
-- **Auth**: Nakama + JWT
+- **Authentication**: Nakama + JWT
 - **Containerization**: Docker + Docker Compose
 
 ## Project Structure
 
 ```
 /
-├── backend/                      # Nakama and Go backend code
+├── backend/
 │   ├── modules/
 │   │   ├── main.go
 │   │   ├── init.go
-│   │   └── tic_tac_toe.go       # Match handler, bot logic, RPC hooks
+│   │   └── tic_tac_toe.go
 │   ├── data/
 │   └── config/
-├── frontend/                     # React + Vite + Tailwind
-│   ├── index.html
-│   ├── vite.config.js
-│   ├── tailwind.config.js        # darkMode: 'class'
+├── frontend/
 │   └── src/
-│       ├── main.jsx              # theme init + providers
-│       ├── App.jsx               # routes
 │       ├── components/
-│       │   ├── Layout.jsx        # header nav + theme toggle
-│       │   └── ProtectedRoute.jsx
 │       ├── contexts/
-│       │   └── AuthContext.jsx   # Nakama auth/session
 │       ├── services/
-│       │   └── nakama.js         # Nakama client helpers
 │       └── pages/
-│           ├── Login.jsx
-│           ├── Register.jsx      # navigates to /verify-email after signup
-│           ├── VerifyEmail.jsx   # OTP UI, then goes to /dashboard
-│           ├── Dashboard.jsx
-│           ├── Matchmaking.jsx   # creates match immediately
-│           ├── Game.jsx          # online match
-│           ├── LocalGame.jsx     # local X/O with working buttons
-│           ├── Leaderboard.jsx   # polls every 5s
-│           ├── Profile.jsx       # edit username
-│           └── Docs.jsx          # game rules
 └── docker-compose.yml
 ```
 
@@ -68,23 +46,23 @@ A real-time multiplayer mobile-first game platform built with Nakama, Go, Cockro
 ### Prerequisites
 
 - Docker and Docker Compose
-- Node.js and npm (for frontend development)
-- Go (for backend development)
+- Node.js and npm
+- Go
 
 ### Running the Project
 
-1. Clone the repository
-2. Start the backend services:
-   ```
-   docker-compose up -d
-   ```
-3. Start the frontend development server:
-   ```
-   cd frontend
-   npm install
-   npm run dev
-   ```
-4. Access the application at `http://localhost:5173`
+1.  Clone the repository.
+2.  Start the backend services:
+    ```bash
+    docker-compose up -d
+    ```
+3.  Start the frontend development server:
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
+4.  Access the application at `http://localhost:5173`.
 
 Environment variables for the frontend (optional):
 
@@ -131,11 +109,11 @@ MIT
 
 ## Tech Stack
 
-- **Backend**: Nakama + Go
+- **Backend**: Nakama (Go)
 - **Database**: CockroachDB
-- **Frontend**: React + TailwindCSS (mobile-first)
+- **Frontend**: React, Vite, Tailwind CSS
 - **Real-time**: WebSocket (via Nakama)
-- **Auth**: Nakama + JWT
+- **Authentication**: Nakama + JWT
 - **Containerization**: Docker + Docker Compose
 
 ## Project Structure
