@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
+import { requestEmailVerification } from '../services/nakama';
 
 export default function Register() {
   const { register, error } = useAuth();
@@ -56,8 +57,14 @@ export default function Register() {
     setLoading(true);
     try {
       await register(email, password, username);
-      toast.success('Account created successfully! Welcome to NAKAMA!');
-      navigate('/dashboard');
+      try {
+        await requestEmailVerification(email);
+      } catch (e) {
+        // Non-fatal: allow user to proceed to verify page even if email send failed
+        console.warn('requestEmailVerification failed:', e);
+      }
+      toast.success('Account created! Please verify your email.');
+      navigate('/verify-email');
     } catch (e) {
       toast.error(e?.message || 'Failed to create account');
     } finally {

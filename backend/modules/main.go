@@ -4,6 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"strings"
+	"time"
 
 	"github.com/heroiclabs/nakama-common/runtime"
 )
@@ -12,17 +18,57 @@ import (
 var nk runtime.NakamaModule
 
 // InitModule is called when the server starts
-func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, initializer runtime.Initializer) error {
+func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nakama runtime.NakamaModule, initializer runtime.Initializer) error {
 	logger.Info("Initializing Nakama Arena game module")
 
 	// Set the global nakama instance
-	nk = nk
+	nk = nakama
 
 	// Register RPC functions
 	if err := initializer.RegisterRpc("register_player", registerPlayer); err != nil {
 		logger.Error("Unable to register RPC function: %v", err)
 		return err
 	}
+
+// helpers
+func generateOTP() (string, error) {
+    b, err := nk.RandomBytes(4)
+    if err != nil {
+        return "", err
+    }
+    n := int(b[0])<<24 | int(b[1])<<16 | int(b[2])<<8 | int(b[3])
+    if n < 0 {
+        n = -n
+    }
+    code := 100000 + (n % 900000)
+    return fmt.Sprintf("%06d", code), nil
+}
+
+func deliverEmail(ctx context.Context, logger runtime.Logger, to string, code string) error {
+    url := os.Getenv("EMAIL_WEBHOOK_URL")
+    if strings.TrimSpace(url) == "" {
+        logger.Info("EMAIL_WEBHOOK_URL not set; verification code for %s is %s", to, code)
+        return nil
+    }
+    payload := map[string]string{
+        "to":      to,
+        "subject": os.Getenv("EMAIL_SUBJECT_PREFIX") + "Your verification code",
+        "text":    "Your verification code is: " + code + "\nIt expires in 10 minutes.",
+    }
+    b, _ := json.Marshal(payload)
+    req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(b)))
+    req.Header.Set("Content-Type", "application/json")
+    httpClient := &http.Client{Timeout: 5 * time.Second}
+    resp, err := httpClient.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+        return errors.New("email webhook returned non-2xx")
+    }
+    return nil
+}
 
 	if err := initializer.RegisterRpc("update_player_stats", updatePlayerStats); err != nil {
 		logger.Error("Unable to register RPC function: %v", err)
@@ -34,15 +80,24 @@ func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runti
 		return err
 	}
 
-	// Register match handler for our game
-	if err := initializer.RegisterMatch("tic_tac_toe", createTicTacToeMatch); err != nil {
-		logger.Error("Unable to register match handler: %v", err)
+	if err := initializer.RegisterRpc("request_verification", requestVerification); err != nil {
+		logger.Error("Unable to register RPC function request_verification: %v", err)
 		return err
 	}
 
-	// Register before match create hook to handle bot matches
-	if err := initializer.RegisterBeforeMatchCreate(beforeMatchCreate); err != nil {
-		logger.Error("Unable to register before match create hook: %v", err)
+	if err := initializer.RegisterRpc("verify_code", verifyCode); err != nil {
+		logger.Error("Unable to register RPC function verify_code: %v", err)
+		return err
+	}
+
+	if err := initializer.RegisterRpc("get_verification_status", getVerificationStatus); err != nil {
+		logger.Error("Unable to register RPC function get_verification_status: %v", err)
+		return err
+	}
+
+	// Register match handler for our game
+	if err := initializer.RegisterMatch("tic_tac_toe", createTicTacToeMatch); err != nil {
+		logger.Error("Unable to register match handler: %v", err)
 		return err
 	}
 
@@ -270,4 +325,111 @@ func beforeMatchCreate(ctx context.Context, logger runtime.Logger, db *sql.DB, n
 	}
 
 	return params, nil
+}
+
+// --- Email verification types and RPCs ---
+type verifyStorage struct {
+    Code      string    `json:"code"`
+    ExpiresAt time.Time `json:"expires_at"`
+    Verified  bool      `json:"verified"`
+    Email     string    `json:"email"`
+}
+
+// requestVerification generates and stores an OTP; optionally triggers email via webhook
+func requestVerification(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+    userID, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+    if !ok || userID == "" {
+        return "", runtime.NewError("unauthorized", 401)
+    }
+    var in struct{ Email string `json:"email"` }
+    if payload != "" {
+        _ = json.Unmarshal([]byte(payload), &in)
+    }
+    if strings.TrimSpace(in.Email) == "" {
+        acc, err := nk.AccountGetId(ctx, userID)
+        if err != nil || acc == nil || acc.Email == "" {
+            return "", runtime.NewError("email not set on account", 400)
+        }
+        in.Email = acc.Email
+    }
+    code, err := generateOTP()
+    if err != nil {
+        logger.Error("otp gen error: %v", err)
+        return "", runtime.NewError("internal error", 500)
+    }
+    vs := verifyStorage{Code: code, ExpiresAt: time.Now().Add(10 * time.Minute), Verified: false, Email: in.Email}
+    data, _ := json.Marshal(vs)
+    write := &runtime.StorageWrite{
+        Collection:      "email_verify",
+        Key:             "status",
+        UserID:          userID,
+        Value:           string(data),
+        PermissionRead:  1,
+        PermissionWrite: 1,
+    }
+    if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{write}); err != nil {
+        logger.Error("storage write error: %v", err)
+        return "", runtime.NewError("internal error", 500)
+    }
+    if err := deliverEmail(ctx, logger, in.Email, code); err != nil {
+        logger.Warn("email delivery failed: %v", err)
+    }
+    out := map[string]any{"ok": true, "message": "verification code sent"}
+    b, _ := json.Marshal(out)
+    return string(b), nil
+}
+
+func verifyCode(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+    userID, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+    if !ok || userID == "" {
+        return "", runtime.NewError("unauthorized", 401)
+    }
+    var in struct{ Code string `json:"code"` }
+    if err := json.Unmarshal([]byte(payload), &in); err != nil || strings.TrimSpace(in.Code) == "" {
+        return "", runtime.NewError("invalid code", 400)
+    }
+    objects, err := nk.StorageRead(ctx, []*runtime.StorageRead{{Collection: "email_verify", Key: "status", UserID: userID}})
+    if err != nil || len(objects) == 0 {
+        return "", runtime.NewError("no verification session", 400)
+    }
+    var cur verifyStorage
+    if err := json.Unmarshal([]byte(objects[0].Value), &cur); err != nil {
+        return "", runtime.NewError("bad verification state", 500)
+    }
+    if cur.Verified {
+        return "{\"ok\":true,\"verified\":true}", nil
+    }
+    if time.Now().After(cur.ExpiresAt) {
+        return "", runtime.NewError("code expired", 400)
+    }
+    if cur.Code != in.Code {
+        return "", runtime.NewError("incorrect code", 400)
+    }
+    cur.Verified = true
+    cur.Code = ""
+    data, _ := json.Marshal(cur)
+    write := &runtime.StorageWrite{Collection: "email_verify", Key: "status", UserID: userID, Value: string(data), PermissionRead: 1, PermissionWrite: 1}
+    if _, err := nk.StorageWrite(ctx, []*runtime.StorageWrite{write}); err != nil {
+        logger.Error("storage write verify error: %v", err)
+        return "", runtime.NewError("internal error", 500)
+    }
+    return "{\"ok\":true,\"verified\":true}", nil
+}
+
+func getVerificationStatus(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
+    userID, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+    if !ok || userID == "" {
+        return "", runtime.NewError("unauthorized", 401)
+    }
+    objects, err := nk.StorageRead(ctx, []*runtime.StorageRead{{Collection: "email_verify", Key: "status", UserID: userID}})
+    if err != nil || len(objects) == 0 {
+        return "{\"verified\":false}", nil
+    }
+    var cur verifyStorage
+    if err := json.Unmarshal([]byte(objects[0].Value), &cur); err != nil {
+        return "{\"verified\":false}", nil
+    }
+    out := map[string]any{"verified": cur.Verified}
+    b, _ := json.Marshal(out)
+    return string(b), nil
 }

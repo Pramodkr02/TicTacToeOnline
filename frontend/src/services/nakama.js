@@ -1,194 +1,109 @@
-import { Client } from '@heroiclabs/nakama-js';
+// src/clients/nakamaClient.js
+import * as nakama from "@heroiclabs/nakama-js";
 
-const host = import.meta.env.VITE_NAKAMA_HOST || 'localhost';
-const port = import.meta.env.VITE_NAKAMA_PORT || '7350';
-const serverKey = import.meta.env.VITE_NAKAMA_KEY || 'defaultkey';
-const useSSL = (import.meta.env.VITE_NAKAMA_SSL || 'false') === 'true';
+const NAKAMA_HOST = process.env.REACT_APP_NAKAMA_HOST || "127.0.0.1";
+const NAKAMA_PORT = process.env.REACT_APP_NAKAMA_PORT || "7350";
+const NAKAMA_USE_SSL = (process.env.REACT_APP_NAKAMA_SSL || "false") === "true";
+const NAKAMA_KEY = process.env.REACT_APP_NAKAMA_KEY || "defaultkey";
 
-let client;
+const client = new nakama.Client(
+  NAKAMA_KEY,
+  NAKAMA_HOST,
+  NAKAMA_PORT,
+  NAKAMA_USE_SSL
+);
+let session = null;
+let socket = null;
 
-export function getClient() {
-  if (!client) {
-    client = new Client(serverKey, host, port);
-    client.ssl = useSSL;
-  }
-  return client;
+export async function authenticateEmail(email, password, create = false) {
+  const result = await client.authenticateEmail({
+    email,
+    password,
+    create,
+  });
+  session = result;
+  return session;
 }
 
-export function restoreSessionFromStorage() {
-  const token = localStorage.getItem('nakama_session');
-  const refresh = localStorage.getItem('nakama_refresh');
-  if (!token || !refresh) return null;
+export async function authenticateDevice(deviceId) {
+  const result = await client.authenticateDevice({
+    id: deviceId,
+    create: true,
+  });
+  session = result;
+  return session;
+}
+
+export function getSession() {
+  return session;
+}
+
+export async function rpc(name, payload = null) {
+  if (!session) throw new Error("Not authenticated");
+  const resp = await client.rpc(
+    session.token,
+    name,
+    payload ? JSON.stringify(payload) : null
+  );
+  if (!resp || !resp.payload) return null;
+  return JSON.parse(resp.payload);
+}
+
+// Email verification helpers
+export async function requestEmailVerification(email) {
+  const payload = email ? { email } : {};
+  return rpc('request_verification', payload);
+}
+
+export async function verifyEmailCode(code) {
+  return rpc('verify_code', { code });
+}
+
+export async function getVerificationStatus() {
+  return rpc('get_verification_status', {});
+}
+
+export async function connectSocket(onMatchData = null, onNotification = null) {
+  if (!session) throw new Error("Not authenticated");
+
+  if (socket && socket.isConnected()) return socket;
+  socket = client.createSocket();
+
+  socket.onmatchdata = (matchId, opCode, data, presences) => {
+    if (onMatchData) {
+      const parsed = tryParse(data);
+      onMatchData({ matchId, opCode, data: parsed, presences });
+    }
+  };
+
+  socket.onnotification = (notification) => {
+    if (onNotification) onNotification(notification);
+  };
+
+  await socket.connect(session.token);
+  return socket;
+}
+
+export function socketJoinMatch(matchId) {
+  if (!socket || !socket.isConnected()) throw new Error("Socket not connected");
+  return socket.joinMatch(matchId);
+}
+
+export function socketLeaveMatch(matchId) {
+  if (!socket || !socket.isConnected()) return;
+  return socket.leaveMatch(matchId);
+}
+
+export function socketSendMatchState(matchId, opCode, data) {
+  if (!socket || !socket.isConnected()) throw new Error("Socket not connected");
+  const buf = typeof data === "string" ? data : JSON.stringify(data);
+  return socket.sendMatchState(matchId, opCode, buf);
+}
+
+function tryParse(data) {
   try {
-    const c = getClient();
-    return c.session(token, refresh);
-  } catch {
-    return null;
+    return JSON.parse(data);
+  } catch (e) {
+    return data;
   }
 }
-
-export function storeSession(session) {
-  localStorage.setItem('nakama_session', session.token);
-  localStorage.setItem('nakama_refresh', session.refresh_token);
-  localStorage.setItem('nakama_user_id', session.user_id);
-}
-
-export function clearStoredSession() {
-  localStorage.removeItem('nakama_session');
-  localStorage.removeItem('nakama_refresh');
-  localStorage.removeItem('nakama_user_id');
-}
-
-export async function createSocket(session) {
-  const c = getClient();
-  const s = c.createSocket();
-  await s.connect(session, useSSL);
-  return s;
-}
-
-// API Service Layer
-export class NakamaService {
-  constructor() {
-    this.client = getClient();
-    this.session = null;
-    this.socket = null;
-  }
-
-  setSession(session) {
-    this.session = session;
-  }
-
-  async authenticateEmail(email, password, create = false, username = '') {
-    try {
-      const session = await this.client.authenticateEmail(email, password, create, username);
-      this.setSession(session);
-      storeSession(session);
-      return session;
-    } catch (error) {
-      console.error('Authentication error:', error);
-      throw error;
-    }
-  }
-
-  async registerPlayer() {
-    if (!this.session) throw new Error('No active session');
-    try {
-      const result = await this.client.rpc(this.session, 'register_player', {});
-      return JSON.parse(result.payload);
-    } catch (error) {
-      console.error('Register player error:', error);
-      throw error;
-    }
-  }
-
-  async updatePlayerStats(userId, win = false, draw = false, score = 0) {
-    if (!this.session) throw new Error('No active session');
-    try {
-      const payload = { user_id: userId, win, draw, score };
-      const result = await this.client.rpc(this.session, 'update_player_stats', payload);
-      return JSON.parse(result.payload);
-    } catch (error) {
-      console.error('Update player stats error:', error);
-      throw error;
-    }
-  }
-
-  async getLeaderboard(limit = 10) {
-    if (!this.session) throw new Error('No active session');
-    try {
-      const payload = { limit };
-      const result = await this.client.rpc(this.session, 'get_leaderboard', payload);
-      return JSON.parse(result.payload);
-    } catch (error) {
-      console.error('Get leaderboard error:', error);
-      throw error;
-    }
-  }
-
-  async getAccount() {
-    if (!this.session) throw new Error('No active session');
-    try {
-      const account = await this.client.getAccount(this.session);
-      return account;
-    } catch (error) {
-      console.error('Get account error:', error);
-      throw error;
-    }
-  }
-
-  async createMatch(name, properties = {}) {
-    if (!this.session) throw new Error('No active session');
-    try {
-      const match = await this.client.createMatch(this.session, name, properties);
-      return match;
-    } catch (error) {
-      console.error('Create match error:', error);
-      throw error;
-    }
-  }
-
-  async joinMatch(matchId) {
-    if (!this.session) throw new Error('No active session');
-    try {
-      const match = await this.client.joinMatch(this.session, matchId);
-      return match;
-    } catch (error) {
-      console.error('Join match error:', error);
-      throw error;
-    }
-  }
-
-  async leaveMatch(matchId) {
-    if (!this.session) throw new Error('No active session');
-    try {
-      await this.client.leaveMatch(this.session, matchId);
-    } catch (error) {
-      console.error('Leave match error:', error);
-      throw error;
-    }
-  }
-
-  async connectSocket() {
-    if (!this.session) throw new Error('No active session');
-    try {
-      this.socket = await createSocket(this.session);
-      return this.socket;
-    } catch (error) {
-      console.error('Connect socket error:', error);
-      throw error;
-    }
-  }
-
-  disconnectSocket() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
-  }
-
-  // Socket event handlers
-  onMatchPresence(callback) {
-    if (this.socket) {
-      this.socket.onmatchpresence = callback;
-    }
-  }
-
-  onMatchData(callback) {
-    if (this.socket) {
-      this.socket.onmatchdata = callback;
-    }
-  }
-
-  sendMatchData(matchId, opCode, data, presences = []) {
-    if (!this.socket) throw new Error('Socket not connected');
-    try {
-      this.socket.sendMatchData(matchId, opCode, JSON.stringify(data), presences);
-    } catch (error) {
-      console.error('Send match data error:', error);
-      throw error;
-    }
-  }
-}
-
-// Export singleton instance
-export const nakamaService = new NakamaService();

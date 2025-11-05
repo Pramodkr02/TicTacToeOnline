@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
+import { verifyEmailCode, requestEmailVerification } from '../services/nakama';
 
 export default function VerifyEmail() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -24,10 +25,24 @@ export default function VerifyEmail() {
     }
     setLoading(true);
     try {
-      // TODO: integrate backend email verification if available
-      await new Promise(r => setTimeout(r, 600));
+      const res = await verifyEmailCode(code);
+      if (!res || !res.verified) {
+        throw new Error('Invalid code');
+      }
       toast.success('Email verified');
       navigate('/dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resend = async () => {
+    try {
+      setLoading(true);
+      await requestEmailVerification();
+      toast.success('Verification code sent');
+    } catch (e) {
+      toast.error(e?.message || 'Failed to resend code');
     } finally {
       setLoading(false);
     }
@@ -46,7 +61,10 @@ export default function VerifyEmail() {
                 <input key={i} value={v} onChange={e=>onChange(i,e.target.value)} inputMode="numeric" maxLength={1} className="w-10 h-12 text-center rounded-md bg-slate-900 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500" />
               ))}
             </div>
-            <button disabled={loading} className="w-full py-2 rounded-md bg-primary-600 hover:bg-primary-500 disabled:opacity-60">{loading? 'Verifying...' : 'Verify'}</button>
+            <div className="flex gap-2">
+              <button type="submit" disabled={loading} className="flex-1 py-2 rounded-md bg-primary-600 hover:bg-primary-500 disabled:opacity-60">{loading? 'Verifying...' : 'Verify'}</button>
+              <button type="button" onClick={resend} disabled={loading} className="px-3 py-2 rounded-md bg-slate-800 hover:bg-slate-700 disabled:opacity-60">Resend</button>
+            </div>
           </form>
         </div>
       </motion.div>
