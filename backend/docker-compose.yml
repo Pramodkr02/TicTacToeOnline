@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  cockroachdb:
+    image: cockroachdb/cockroach:latest-v23.1
+    command: start-single-node --insecure --http-addr=0.0.0.0:8080
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    volumes:
+      - cockroach-data:/cockroach/cockroach-data
+    networks:
+      - nakama-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nakama:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      cockroachdb:
+        condition: service_healthy
+    ports:
+      - "7349:7349"
+      - "7350:7350"
+      - "7351:7351"
+    volumes:
+      - ./backend/config:/nakama/data/config
+      - ./backend/modules:/nakama/data/modules
+      - ./backend/data:/nakama/data/data
+    networks:
+      - nakama-network
+    environment:
+      - NAKAMA_DATABASE_ADDRESS=root@cockroachdb:26257
+      - NAKAMA_HTTP_KEY=defaultkey
+      - NAKAMA_SERVER_KEY=defaultkey
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7350/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    depends_on:
+      - nakama
+    networks:
+      - nakama-network
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/dist
+    environment:
+      - VITE_NAKAMA_HOST=nakama
+      - VITE_NAKAMA_PORT=7350
+      - VITE_NAKAMA_KEY=defaultkey
+      - VITE_NAKAMA_SSL=false
+      - CHOKIDAR_USEPOLLING=true
+
+networks:
+  nakama-network:
+    driver: bridge
+
+volumes:
+  cockroach-data:
