@@ -40,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:7350/ || exit 1
 
 # Start Nakama with migration
-ENTRYPOINT ["/bin/sh", "-ecx", "/nakama/nakama migrate up --database.address root@cockroachdb:26257 && /nakama/nakama --config /nakama/data/config/nakama-config.yml"]
+ENTRYPOINT ["/bin/sh", "-ecx", "/nakama/nakama migrate up --database.address ${NAKAMA_DATABASE_ADDRESS:-root@cockroachdb:26257} && /nakama/nakama --config /nakama/data/config/nakama-config.yml --database.address ${NAKAMA_DATABASE_ADDRESS:-root@cockroachdb:26257}"]

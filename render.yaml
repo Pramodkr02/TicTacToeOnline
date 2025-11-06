@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: nakama-backend
+    env: docker
+    plan: starter
+    dockerfilePath: backend/Dockerfile
+    envVars:
+      - key: NAKAMA_DATABASE_ADDRESS
+        # Example for CockroachDB: root@host:26257
+        value: root@cockroachdb:26257
+      - key: EMAIL_WEBHOOK_URL
+        sync: false
+      - key: EMAIL_SUBJECT_PREFIX
+        value: "[Nakama] "
+    healthCheckPath: /
