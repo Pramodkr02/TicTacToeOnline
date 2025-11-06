@@ -39,5 +39,5 @@ EXPOSE 7349 7350 7351
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:7350/ || exit 1
 
-# Start Nakama with migration
-ENTRYPOINT ["/bin/sh", "-ecx", "/nakama/nakama migrate up --database.address ${NAKAMA_DATABASE_ADDRESS:-root@cockroachdb:26257} && /nakama/nakama --config /nakama/data/config/nakama-config.yml --database.address ${NAKAMA_DATABASE_ADDRESS:-root@cockroachdb:26257}"]
+# Start Nakama with migration (supports NAKAMA_DATABASE_DSN or NAKAMA_DATABASE_ADDRESS)
+ENTRYPOINT ["/bin/sh", "-ec", "DB_ARG=\"${NAKAMA_DATABASE_DSN:-${NAKAMA_DATABASE_ADDRESS:-}}\"; NAME_ARG=\"${NAKAMA_DATABASE_NAME:-nakama}\"; if [ -z \"$DB_ARG\" ]; then echo 'Set NAKAMA_DATABASE_DSN or NAKAMA_DATABASE_ADDRESS'; exit 1; fi; /nakama/nakama migrate up --database.address \"$DB_ARG\" --database.name \"$NAME_ARG\"; /nakama/nakama --config /nakama/data/config/nakama-config.yml --database.address \"$DB_ARG\" --database.name \"$NAME_ARG\""]
