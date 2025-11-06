@@ -1,5 +1,4 @@
-import React, { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useMemo, useState } from 'react';
 
 const emptyBoard = () => Array(3).fill(null).map(()=>Array(3).fill(0));
 

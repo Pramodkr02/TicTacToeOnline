@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { connectSocket, socketJoinMatch, socketSendMatchState, rpc } from '../services/nakama';
+import { connectSocket, socketJoinMatch, rpc } from '../services/nakama';
 
 export default function Game() {
   const { matchId } = useParams();
@@ -81,7 +80,7 @@ export default function Game() {
               </span>
             </div>
           </motion.button>
-        )))}
+        ))}
       </div>
     </div>
   );

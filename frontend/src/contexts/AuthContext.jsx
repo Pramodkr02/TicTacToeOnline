@@ -1,10 +1,15 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, useEffect } from 'react';
 import { getSession, authenticateEmail as nakamaAuthEmail, logout as nakamaLogout, rpc } from '../services/nakama';
 
 const AuthContext = createContext();
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
 }
 
 export function AuthProvider({ children }) {
@@ -60,6 +65,7 @@ export function AuthProvider({ children }) {
     loading,
     error,
     isAuthenticated: !!session,
+    currentUser: session?.user,
     login,
     register,
     logout,

@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { nakamaService } from '../services/nakama';
+import { rpc } from '../services/nakama';
 
 export default function Profile() {
   const { currentUser, session } = useAuth();
@@ -27,13 +26,9 @@ export default function Profile() {
       try {
         setLoading(true);
         
-        // Get user account info
-        const account = await nakamaService.getAccount(session);
-        setUsername(account.user.username);
-        setEmail(account.user.email);
-        
         // Get user statistics
-        const stats = await nakamaService.getUserStats(session);
+        const statsResult = await rpc('get_player_stats', {});
+        const stats = statsResult.payload || {};
         setUserStats({
           score: stats.score || 0,
           wins: stats.wins || 0,
