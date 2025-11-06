@@ -11,16 +11,23 @@ database:
   max_open_conns: 0
   max_idle_conns: 100
 
+console:
+  username: "admin"
+  password: "your-secure-password-here"
+  signing_key: "your-secure-signing-key-here-minimum-16-chars"
+
 session:
   token_expiry_sec: 7200
   refresh_token_expiry_sec: 86400
+  encryption_key: "your-secure-session-encryption-key-32-chars-min"
+  refresh_encryption_key: "your-secure-refresh-encryption-key-32-chars"
 
 socket:
-  server_key: "defaultkey"
+  server_key: "your-secure-socket-server-key-here"
   port: 7350
   max_message_size_bytes: 4096
   max_request_size_bytes: 131072
 
 runtime:
   path: "/nakama/data/modules"
-  http_key: "defaultkey"
+  http_key: "your-secure-runtime-http-key-here"

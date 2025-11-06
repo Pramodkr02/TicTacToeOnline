@@ -37,8 +37,8 @@ services:
       - nakama-network
     environment:
       - NAKAMA_DATABASE_ADDRESS=root@cockroachdb:26257
-      - NAKAMA_HTTP_KEY=defaultkey
-      - NAKAMA_SERVER_KEY=defaultkey
+      - NAKAMA_HTTP_KEY=your-secure-runtime-http-key-here
+      - NAKAMA_SERVER_KEY=your-secure-socket-server-key-here
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7350/"]
       interval: 10s
@@ -62,7 +62,7 @@ services:
     environment:
       - VITE_NAKAMA_HOST=nakama
       - VITE_NAKAMA_PORT=7350
-      - VITE_NAKAMA_KEY=defaultkey
+      - VITE_NAKAMA_KEY=your-secure-socket-server-key-here
       - VITE_NAKAMA_SSL=false
       - CHOKIDAR_USEPOLLING=true
 
