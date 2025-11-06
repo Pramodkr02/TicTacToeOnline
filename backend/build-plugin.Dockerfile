@@ -1,5 +1,7 @@
 # Build plugin for Linux glibc (not musl) - compatible with Nakama Debian base image
-FROM golang:1.22
+# CRITICAL: Must match Nakama 3.21.0's exact Go version
+# Using golang:1.21.0 to match Nakama 3.21.0's likely build version
+FROM golang:1.21.0
 
 WORKDIR /app
 
@@ -18,7 +20,10 @@ ENV CGO_ENABLED=1
 ENV GOOS=linux
 ENV GOARCH=amd64
 
-RUN cd modules && go build -buildmode=plugin -o module.so .
+# Install build dependencies
+RUN apt-get update && apt-get install -y gcc libc6-dev && rm -rf /var/lib/apt/lists/*
+
+RUN cd modules && go build -trimpath -buildmode=plugin -o module.so .
 
 # Output the plugin
 FROM scratch

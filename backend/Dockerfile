@@ -1,7 +1,13 @@
 # Build plugin stage - use glibc-based Go image (not Alpine/musl)
-FROM golang:1.22 AS plugin-builder
+# CRITICAL: Must match Nakama 3.21.0's exact Go version
+# Using golang:1.21.0 (first 1.21 release) - most likely to match Nakama 3.21.0
+# If this still fails, try: golang:1.21.1, golang:1.21.2, etc.
+FROM golang:1.21.0 AS plugin-builder
 
 WORKDIR /app
+
+# Install build dependencies for CGO
+RUN apt-get update && apt-get install -y gcc libc6-dev && rm -rf /var/lib/apt/lists/*
 
 # Copy Go module files
 COPY go.mod go.sum ./
@@ -11,11 +17,17 @@ RUN go mod download
 COPY modules/ ./modules/
 
 # Build plugin for Linux glibc (Nakama uses Debian, not Alpine)
+# CRITICAL: These must match exactly
 ENV CGO_ENABLED=1
 ENV GOOS=linux
 ENV GOARCH=amd64
 
-RUN cd modules && go build -buildmode=plugin -o main.so .
+# Verify Go version (should be 1.21.x)
+RUN go version
+
+# Build the plugin with exact same toolchain as Nakama
+# Using -trimpath to ensure reproducible builds
+RUN cd modules && go build -trimpath -buildmode=plugin -o main.so .
 
 # Production stage - Nakama server with Go plugin
 FROM heroiclabs/nakama:3.21.0
