@@ -41,11 +41,7 @@ type TicTacToeState struct {
 
 // createTicTacToeMatch creates a new Tic-Tac-Toe match
 func createTicTacToeMatch(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule) (runtime.Match, error) {
-	return &TicTacToeMatch{
-		logger: logger,
-		db:     db,
-		nk:     nk,
-	}, nil
+    return &TicTacToeMatch{logger: logger, db: db, nk: nk}, nil
 }
 
 // TicTacToeMatch implements the runtime.Match interface
@@ -62,7 +58,7 @@ type TicTacToeMatch struct {
 }
 
 // MatchInit initializes the match
-func (m *TicTacToeMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, params map[string]interface{}) (interface{}, int, string, error) {
+func (m *TicTacToeMatch) MatchInit(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, params map[string]interface{}) (interface{}, int, string) {
 	m.logger = logger
 	m.db = db
 	m.nk = nk
@@ -110,26 +106,22 @@ func (m *TicTacToeMatch) MatchInit(ctx context.Context, logger runtime.Logger, d
 		"open": true,
 		"type": "tic_tac_toe",
 	}
-	labelJSON, err := json.Marshal(label)
-	if err != nil {
-		return nil, 0, "", err
-	}
-	
-	return state, m.tickRate, string(labelJSON), nil
+    labelJSON, _ := json.Marshal(label)
+    return state, m.tickRate, string(labelJSON)
 }
 
 // MatchJoinAttempt is called when a player attempts to join the match
-func (m *TicTacToeMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presence runtime.Presence, metadata map[string]string) (interface{}, bool, string, error) {
+func (m *TicTacToeMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, presence runtime.Presence, metadata map[string]string) (interface{}, bool, string) {
 	s := state.(*TicTacToeState)
 	
 	// Check if the match is already full
 	if len(s.Players) >= 2 && !s.BotMatch {
-		return s, false, "Match is full", nil
+        return s, false, "Match is full"
 	}
 	
 	// Check if the player is already in the match
 	if _, ok := s.Players[presence.GetUserId()]; ok {
-		return s, true, "Rejoining match", nil
+        return s, true, "Rejoining match"
 	}
 	
 	// For bot matches, only allow one human player
@@ -137,13 +129,13 @@ func (m *TicTacToeMatch) MatchJoinAttempt(ctx context.Context, logger runtime.Lo
 		// Check if this is the same player reconnecting
 		for playerID := range s.Players {
 			if playerID == presence.GetUserId() {
-				return s, true, "Rejoining bot match", nil
+                return s, true, "Rejoining bot match"
 			}
 		}
-		return s, false, "Bot match already has a player", nil
+        return s, false, "Bot match already has a player"
 	}
 	
-	return s, true, "Join successful", nil
+    return s, true, "Join successful"
 }
 
 // MatchJoin is called when a player successfully joins the match
@@ -420,6 +412,11 @@ func (m *TicTacToeMatch) MatchTerminate(ctx context.Context, logger runtime.Logg
 	}
 	
 	return s
+}
+
+// MatchSignal handles match signals; no-ops for this match type
+func (m *TicTacToeMatch) MatchSignal(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, dispatcher runtime.MatchDispatcher, tick int64, state interface{}, data string) (interface{}, string) {
+    return state, ""
 }
 
 // makeBotMove makes a move for the bot based on difficulty
@@ -728,25 +725,30 @@ func (m *TicTacToeMatch) updatePlayerStats(ctx context.Context, userID string, w
 		return
 	}
 	
-	// Prepare RPC payload
-	payload := map[string]interface{}{
-		"user_id": userID,
-		"win":     win,
-		"draw":    draw,
-		"score":   win ? 10 : (draw ? 5 : 0), // 10 points for win, 5 for draw, 0 for loss
+    // Prepare score change
+    score := 0
+	if win {
+		score = 10
+	} else if draw {
+		score = 5
 	}
-	
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		m.logger.Error("Error marshaling player stats payload: %v", err)
-		return
-	}
-	
-	// Call RPC to update player stats
-	_, err = m.nk.RpcFunc(ctx, "update_player_stats", string(payloadJSON), userID, true)
-	if err != nil {
-		m.logger.Error("Error updating player stats: %v", err)
-	}
+
+    // Apply update directly to DB
+    var query string
+    var args []interface{}
+    if draw {
+        query = `UPDATE player_stats SET draws = draws + 1, score = score + $2, updated_at = NOW() WHERE user_id = $1`
+        args = []interface{}{userID, score}
+    } else if win {
+        query = `UPDATE player_stats SET wins = wins + 1, score = score + $2, updated_at = NOW() WHERE user_id = $1`
+        args = []interface{}{userID, score}
+    } else {
+        query = `UPDATE player_stats SET losses = losses + 1, updated_at = NOW() WHERE user_id = $1`
+        args = []interface{}{userID}
+    }
+    if _, err := m.db.ExecContext(ctx, query, args...); err != nil {
+        m.logger.Error("Error updating player stats: %v", err)
+    }
 }
 
 // recordMatchResult records the match result in the database

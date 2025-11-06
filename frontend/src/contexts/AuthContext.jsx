@@ -43,7 +43,9 @@ export function AuthProvider({ children }) {
         setError('');
         setLoading(true);
         const newSession = await nakamaAuthEmail(email, password, true);
-        await rpc("register", { email: email });
+        await rpc("register_player", {});
+        // Kick off email verification if available
+        try { await rpc("request_verification", { email }); } catch (_) {}
         setSession(newSession);
         return newSession;
     } catch (error) {

@@ -2,7 +2,12 @@
 // src/services/nakama.js
 import * as nakama from "@heroiclabs/nakama-js";
 
-const client = new nakama.Client(import.meta.env.VITE_NAKAMA_KEY, import.meta.env.VITE_NAKAMA_HOST, import.meta.env.VITE_NAKAMA_PORT, import.meta.env.VITE_NAKAMA_SSL === "true");
+const client = new nakama.Client(
+  import.meta.env.VITE_NAKAMA_KEY,
+  import.meta.env.VITE_NAKAMA_HOST,
+  Number(import.meta.env.VITE_NAKAMA_PORT),
+  import.meta.env.VITE_NAKAMA_SSL === "true"
+);
 
 let session = null;
 let socket = null;
@@ -35,11 +40,7 @@ export async function authenticateEmail(email, password, create = false) {
 
 export async function rpc(name, payload = {}) {
   if (!session) throw new Error("Not authenticated");
-  return client.rpc(
-    session.token,
-    name,
-    payload
-  );
+  return client.rpc(session, name, payload);
 }
 
 export async function connectSocket(onMatchData, onNotification) {
@@ -69,7 +70,9 @@ export function socketJoinMatch(matchId) {
 
 export function socketSendMatchState(matchId, opCode, data) {
   if (!socket || !socket.isConnected) throw new Error("Socket not connected");
-  return socket.send({ match_data_send: { match_id: matchId, op_code: opCode, data: data } });
+  const payload = typeof data === "string" ? data : JSON.stringify(data);
+  const bytes = new TextEncoder().encode(payload);
+  return socket.sendMatchData(matchId, opCode, bytes);
 }
 
 export async function logout() {

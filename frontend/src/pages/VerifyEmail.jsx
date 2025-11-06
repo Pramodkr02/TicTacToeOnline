@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { rpc } from '../services/nakama';
+import { motion } from 'framer-motion';
 
 export default function VerifyEmail() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -9,6 +10,12 @@ export default function VerifyEmail() {
   const navigate = useNavigate();
   const location = useLocation();
   const email = location.state?.email;
+
+  useEffect(() => {
+    if (email) {
+      rpc('request_verification', { email }).catch(() => {});
+    }
+  }, [email]);
 
   const onChange = (idx, val) => {
     if (val.length > 1) return;
@@ -24,14 +31,10 @@ export default function VerifyEmail() {
       toast.error('Enter the 6-digit code');
       return;
     }
-    if (!email) {
-      toast.error('Email not found. Please try registering again.');
-      navigate('/login');
-      return;
-    }
+    // Email is optional server-side; verification is tied to session
     setLoading(true);
     try {
-      await rpc('verify_email', { email, otp: code });
+      await rpc('verify_code', { code });
       toast.success('Email verified successfully!');
       navigate('/lobby');
     } catch (err) {

@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,31 +18,12 @@ import (
 // nk represents the Nakama server instance
 var nk runtime.NakamaModule
 
-// InitModule is called when the server starts
-func InitModule(ctx context.Context, logger runtime.Logger, db *sql.DB, nakama runtime.NakamaModule, initializer runtime.Initializer) error {
-	logger.Info("Initializing Nakama Arena game module")
-
-	// Set the global nakama instance
-	nk = nakama
-
-	// Register RPC functions
-	if err := initializer.RegisterRpc("register_player", registerPlayer); err != nil {
-		logger.Error("Unable to register RPC function: %v", err)
-		return err
-	}
-
-// helpers
 func generateOTP() (string, error) {
-    b, err := nk.RandomBytes(4)
-    if err != nil {
-        return "", err
-    }
-    n := int(b[0])<<24 | int(b[1])<<16 | int(b[2])<<8 | int(b[3])
-    if n < 0 {
-        n = -n
-    }
-    code := 100000 + (n % 900000)
-    return fmt.Sprintf("%06d", code), nil
+	code := ""
+	for i := 0; i < 6; i++ {
+		code += strconv.Itoa(rand.Intn(10))
+	}
+	return code, nil
 }
 
 func deliverEmail(ctx context.Context, logger runtime.Logger, to string, code string) error {
@@ -68,61 +50,6 @@ func deliverEmail(ctx context.Context, logger runtime.Logger, to string, code st
         return errors.New("email webhook returned non-2xx")
     }
     return nil
-}
-
-	if err := initializer.RegisterRpc("update_player_stats", updatePlayerStats); err != nil {
-		logger.Error("Unable to register RPC function: %v", err)
-		return err
-	}
-
-	if err := initializer.RegisterRpc("get_leaderboard", getLeaderboard); err != nil {
-		logger.Error("Unable to register RPC function: %v", err)
-		return err
-	}
-
-	if err := initializer.RegisterRpc("request_verification", requestVerification); err != nil {
-		logger.Error("Unable to register RPC function request_verification: %v", err)
-		return err
-	}
-
-	if err := initializer.RegisterRpc("verify_code", verifyCode); err != nil {
-		logger.Error("Unable to register RPC function verify_code: %v", err)
-		return err
-	}
-
-	if err := initializer.RegisterRpc("get_verification_status", getVerificationStatus); err != nil {
- 		logger.Error("Unable to register RPC function get_verification_status: %v", err)
- 		return err
- 	}
-
-	if err := initializer.RegisterRpc("make_move", rpcMakeMove); err != nil {
-		logger.Error("Unable to register RPC function make_move: %v", err)
-		return err
-	}
-
-	if err := initializer.RegisterRpc("list_rooms", rpcListRooms); err != nil {
-		logger.Error("Unable to register RPC: %v", err)
-		return err
-	}
-
-	if err := initializer.RegisterRpc("create_room", rpcCreateRoom); err != nil {
-		logger.Error("Unable to register RPC: %v", err)
-		return err
-	}
-
-	if err := initializer.RegisterRpc("join_room", rpcJoinRoom); err != nil {
-		logger.Error("Unable to register RPC: %v", err)
-		return err
-	}
-
-	// Register match handler for our game
-	if err := initializer.RegisterMatch("tic_tac_toe", createTicTacToeMatch); err != nil {
-		logger.Error("Unable to register match handler: %v", err)
-		return err
-	}
-
-	logger.Info("Nakama Arena game module initialized successfully")
-	return nil
 }
 
 // registerPlayer creates or updates player stats record
@@ -454,33 +381,7 @@ func getVerificationStatus(ctx context.Context, logger runtime.Logger, db *sql.D
     return string(b), nil
 }
 
-func rpcJoinRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
-	userID, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
-	if !ok {
-		return "", runtime.NewError("User ID not found", 401)
-	}
 
-	var input struct {
-		MatchID string `json:"match_id"`
-	}
-
-	if err := json.Unmarshal([]byte(payload), &input); err != nil {
-		return "", runtime.NewError("Invalid payload", 400)
-	}
-
-	// Attempt to join the match
-	_, _, err := nk.MatchJoin(ctx, input.MatchID, nil)
-	if err != nil {
-		// Check if the error is due to the match being full
-		if strings.Contains(err.Error(), "match full") {
-			return "", runtime.NewError("Room is full", 409) // 409 Conflict
-		}
-		logger.Error("Error joining match: %v", err)
-		return "", err
-	}
-
-	return "{\"success\":true}", nil
-}
 
 func rpcMakeMove(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
 	userID, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
@@ -523,24 +424,25 @@ func rpcListRooms(ctx context.Context, logger runtime.Logger, db *sql.DB, nk run
 	}
 
 	// We use a map to deduplicate matches by ID, as a match can have multiple nodes.
-	deduplicatedMatches := make(map[string]*runtime.Match)
+	deduplicatedMatches := make(map[string]interface{})
+	matchList := make([]map[string]interface{}, 0)
+	
 	for _, match := range matches {
-		if _, ok := deduplicatedMatches[match.MatchID]; !ok {
-			deduplicatedMatches[match.MatchID] = match
+		if _, ok := deduplicatedMatches[match.MatchId]; !ok {
+			deduplicatedMatches[match.MatchId] = true
+			matchList = append(matchList, map[string]interface{}{
+				"match_id":     match.MatchId,
+				"authoritative": match.Authoritative,
+				"size":         match.Size,
+			})
 		}
-	}
-
-	// Convert map back to slice
-	uniqueMatches := make([]*runtime.Match, 0, len(deduplicatedMatches))
-	for _, match := range deduplicatedMatches {
-		uniqueMatches = append(uniqueMatches, match)
 	}
 
 	// Create a response structure
 	response := struct {
-		Rooms []*runtime.Match `json:"rooms"`
+		Rooms []map[string]interface{} `json:"rooms"`
 	}{
-		Rooms: uniqueMatches,
+		Rooms: matchList,
 	}
 
 	jsonResponse, err := json.Marshal(response)
@@ -566,8 +468,8 @@ func rpcCreateRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk ru
 }
 
 func rpcJoinRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runtime.NakamaModule, payload string) (string, error) {
-	userID, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
-	if !ok {
+    _, ok := ctx.Value(runtime.RUNTIME_CTX_USER_ID).(string)
+    if !ok {
 		return "", runtime.NewError("User ID not found", 401)
 	}
 
@@ -579,16 +481,5 @@ func rpcJoinRoom(ctx context.Context, logger runtime.Logger, db *sql.DB, nk runt
 		return "", runtime.NewError("Invalid payload", 400)
 	}
 
-	// Attempt to join the match
-	err := nk.MatchJoin(ctx, input.MatchID, userID, nil)
-	if err != nil {
-		// Check if the error is due to the match being full
-		if strings.Contains(err.Error(), "match full") {
-			return "", runtime.NewError("Room is full", 409) // 409 Conflict
-		}
-		logger.Error("Error joining match: %v", err)
-		return "", err
-	}
-
-	return "{\"success\":true}", nil
+	return "{\"success\":true,\"match_id\":\"" + input.MatchID + "\"}", nil
 }

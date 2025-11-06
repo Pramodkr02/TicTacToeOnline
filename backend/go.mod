@@ -1,6 +1,6 @@
-module github.com/Pramodkr02/TicTacToeOnline
+module nakama-arena
 
-go 1.20
+go 1.21
 
 require github.com/heroiclabs/nakama-common v1.31.0
 

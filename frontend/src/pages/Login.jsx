@@ -28,7 +28,7 @@ export default function Login() {
         toast.success(
           "Registered successfully! Please check your email to verify your account."
         );
-        navigate("/verify-email");
+        navigate("/verify-email", { state: { email } });
       } else {
         await login(email, password);
         toast.success("Signed in successfully!");

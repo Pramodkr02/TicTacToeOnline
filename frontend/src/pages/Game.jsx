@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
-import { connectSocket, socketJoinMatch, rpc } from '../services/nakama';
+import { connectSocket, socketJoinMatch } from '../services/nakama';
+import { motion } from 'framer-motion';
+import { socketSendMatchState } from '../services/nakama';
 
 export default function Game() {
   const { matchId } = useParams();
@@ -17,15 +19,20 @@ export default function Game() {
       const opCode = result.op_code;
       const data = JSON.parse(new TextDecoder().decode(result.data));
 
-      if (opCode === 1) { // Game state update
-        setBoard(data.board);
-        setStatus(data.message);
-      } else if (opCode === 2) { // Player assignment
-        setPlayer(data.player);
+      if (opCode === 2) { // Game started
+        setStatus(data.message || 'Game started');
       } else if (opCode === 3) { // Game over
         setStatus(data.message);
         toast.info(data.message);
         setTimeout(() => navigate('/lobby'), 5000);
+      } else if (opCode === 4) { // Move broadcast
+        const idx = data.row * 3 + data.col;
+        setBoard((prev) => {
+          const next = [...prev];
+          next[idx] = data.mark;
+          return next;
+        });
+        setStatus(`Player ${data.mark === 1 ? 'X' : 'O'} moved`);
       }
     };
 
@@ -43,7 +50,9 @@ export default function Game() {
   const sendMove = async (index) => {
     if (board[index] !== null) return;
     try {
-      await rpc('make_move', { match_id: matchId, cell_index: index });
+      const row = Math.floor(index / 3);
+      const col = index % 3;
+      await socketSendMatchState(matchId, 1, { row, col });
     } catch (error) {
       toast.error(error.message || 'Failed to make move.');
       console.error(error);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { rpc } from '../services/nakama';
+import { motion } from 'framer-motion';
 
 export default function Leaderboard() {
   const [rows, setRows] = useState([]);
@@ -14,7 +15,7 @@ export default function Leaderboard() {
         setError(null);
         
         const response = await rpc('get_leaderboard', {});
-        setRows(response.payload.records || []);
+        setRows(response.payload.leaderboard || []);
         
       } catch (e) {
         console.error('Failed to fetch leaderboard:', e);

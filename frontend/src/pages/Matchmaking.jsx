@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
+import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
-import { rpc, logout as nakamaLogout } from '../services/nakama';
+import { rpc } from '../services/nakama';
+import { motion } from 'framer-motion';
 
 export default function Lobby() {
   const navigate = useNavigate();
-  const { setUser, setToken } = useAuth();
+  const { logout } = useAuth();
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -56,9 +57,7 @@ export default function Lobby() {
 
   const handleLogout = async () => {
     try {
-      await nakamaLogout();
-      setUser(null);
-      setToken(null);
+      await logout();
       toast.success('Logged out successfully');
       navigate('/login');
     } catch (error) {
